@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Mail, Lock, User, ShieldCheck, ArrowRight, AlertCircle, Check } from 'lucide-react';
+import { Sparkles, Mail, Lock, User, ShieldCheck, ArrowRight, AlertCircle, Check, Globe, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types';
 
@@ -17,6 +17,7 @@ export const AuthPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   // Redirect if already logged in
   if (user) {
@@ -67,7 +68,15 @@ export const AuthPage: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
-      setError(err.message || 'Failed to sign in with Google.');
+      if (
+        err.code === 'auth/unauthorized-domain' ||
+        err.message?.includes('unauthorized-domain') ||
+        err.message?.includes('Unauthorized domain')
+      ) {
+        setShowGoogleModal(true);
+      } else {
+        setError(err.message || 'Failed to sign in with Google.');
+      }
     } finally {
       setLoading(false);
     }
@@ -352,6 +361,85 @@ export const AuthPage: React.FC = () => {
         )}
 
       </div>
+
+      {/* Friendly Google Sign-In Notification Modal */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 relative">
+            <button 
+              onClick={() => setShowGoogleModal(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 rounded-2xl shrink-0">
+                <Globe className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-zinc-900 dark:text-zinc-100">
+                  Google Sign-In Notice
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Custom Domain Authentication Info
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-800/60 p-4 rounded-2xl border border-zinc-200/60 dark:border-zinc-700/60">
+              <p>
+                Because this app is hosted on a custom deployed domain (e.g. Netlify), Firebase Google Authentication requires adding the domain to Firebase's Authorized Domains list.
+              </p>
+              <p className="font-bold text-zinc-800 dark:text-zinc-200 pt-1">
+                🌟 You can explore the full app easily using:
+              </p>
+              <ul className="space-y-1.5 list-disc list-inside text-zinc-600 dark:text-zinc-400 font-medium">
+                <li><strong className="text-indigo-600 dark:text-indigo-400">Instant Demo Access:</strong> One-click sign in as Jordan Smith or Alex Chen</li>
+                <li><strong className="text-indigo-600 dark:text-indigo-400">Email & Password:</strong> Create a new account with any email address</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowGoogleModal(false);
+                  setLoading(true);
+                  try {
+                    await loginWithEmail('student.demo@skillhub.edu', 'demo1234');
+                    navigate('/');
+                  } catch {
+                    try {
+                      await signUpWithEmail('student.demo@skillhub.edu', 'demo1234', 'Jordan Smith (Student)', 'student');
+                      navigate('/');
+                    } catch (err: any) {
+                      setError(err.message);
+                    }
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 animate-pulse" />
+                Sign In as Demo Student
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGoogleModal(false);
+                  setMode('signup');
+                }}
+                className="w-full py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-semibold text-xs transition-colors"
+              >
+                Create Account with Email
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
