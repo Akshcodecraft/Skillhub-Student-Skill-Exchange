@@ -285,40 +285,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Try Firebase Auth
       await signInWithEmailAndPassword(auth, cleanEmail, pass);
     } catch (err: any) {
-      // Check if user is in our local account registry or Firestore database
+      // Check if user is in our local account registry
       const registry = getRegisteredAccountsMap();
       const registeredUser = registry[cleanEmail];
-
-      // Also check Firestore user database
-      let firestoreUserProf: UserProfile | null = null;
-      try {
-        const q = query(collection(db, 'users'), where('email', '==', cleanEmail), limit(1));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          firestoreUserProf = snap.docs[0].data() as UserProfile;
-        }
-      } catch (e) {
-        console.warn('Firestore user lookup error:', e);
-      }
 
       // Built-in Demo accounts check
       const isDemoStudent = cleanEmail === 'student.demo@skillhub.edu';
       const isDemoMentor = cleanEmail === 'alex.chen@campus.edu';
 
-      if (!registeredUser && !firestoreUserProf && !isDemoStudent && !isDemoMentor) {
-        throw new Error('No account found with this email address. Please click "Create Account" first.');
+      // If registered locally with password check
+      if (registeredUser) {
+        if (registeredUser.password && registeredUser.password !== pass) {
+          throw new Error('Incorrect password. Please verify your credentials and try again.');
+        }
+        await setFallbackUser(cleanEmail, registeredUser.displayName, registeredUser.role);
+        return;
       }
 
-      // Check password if available in registered accounts
-      if (registeredUser && registeredUser.password && registeredUser.password !== pass) {
-        throw new Error('Incorrect password. Please verify your credentials and try again.');
+      // If built-in demo account
+      if (isDemoStudent || isDemoMentor) {
+        const displayName = isDemoMentor ? 'Alex Chen' : 'Jordan Smith';
+        const role = isDemoMentor ? 'mentor' : 'student';
+        await setFallbackUser(cleanEmail, displayName, role);
+        return;
       }
 
-      // Retrieve exact registered display name
-      const displayName = registeredUser?.displayName || firestoreUserProf?.displayName || (isDemoMentor ? 'Alex Chen' : isDemoStudent ? 'Jordan Smith' : 'Student');
-      const role = registeredUser?.role || firestoreUserProf?.role || 'student';
+      // Standard error messages for unregistered or invalid credentials
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        throw new Error('No registered account found with this email. Please click "Create Account" first.');
+      }
+      if (err.code === 'auth/wrong-password') {
+        throw new Error('Incorrect password. Please check your password and try again.');
+      }
 
-      await setFallbackUser(cleanEmail, displayName, role);
+      // Fallback for any other unregistered attempt
+      throw new Error('Invalid email or password. Please click "Create Account" to register a new account.');
     } finally {
       setLoading(false);
     }
@@ -328,6 +329,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      if (err.code === 'auth/unauthorized-domain') {
+        throw new Error('Unauthorized domain: Please add your Netlify site domain (e.g. your-app.netlify.app) to Firebase Console > Authentication > Settings > Authorized domains.');
+      }
+      throw err;
     } finally {
       setLoading(false);
     }
